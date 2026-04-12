@@ -77,11 +77,12 @@ CREATE TABLE routine_exercises (
     exercise_id UUID REFERENCES exercises(id),
     target_sets INT,
     target_reps INT,
-    -- Para cardio
+    target_weight NUMERIC, 
     target_duration_seconds INT,
     target_distance_km NUMERIC,
     CONSTRAINT unique_routine_exercise UNIQUE (routine_id, exercise_id)
 );
+
 
 -- =========================
 -- WORKOUTS (sesión real)

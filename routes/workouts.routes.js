@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const workoutsController = require("../controllers/workouts.controller");
+const { validateRoutineId } = require("../validators/routines.validator");
 
 const {
     validateWorkoutId,
@@ -13,10 +14,9 @@ router.post(
     workoutsController.createWorkout
 );
 
-// Get workouts 
-router.get(
-    "/",
-    workoutsController.getAllWorkouts
+router.get("/:workoutId/summary", 
+    validateWorkoutId,
+    workoutsController.summary
 );
 
 // Get workout by ID
@@ -24,6 +24,17 @@ router.get(
     "/:workoutId",
     validateWorkoutId,
     workoutsController.getWorkout
+);
+
+// Get workouts 
+router.get(
+    "/",
+    workoutsController.getAllWorkouts
+);
+
+router.patch("/update-routine-progress",
+    validateRoutineId, 
+    workoutsController.updateRoutineProgress
 );
 
 // Finish workout

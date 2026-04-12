@@ -20,7 +20,6 @@ exports.createWorkoutExercise = async (req, res, next) => {
                 exerciseId
             ]
         );
-
         return res.status(201).json({
             statusCode: 201,
             status: "success",
@@ -67,7 +66,6 @@ exports.getWorkoutExercise = async (req, res, next) => {
 exports.getWorkoutExercises = async (req, res, next) => {
     try {
         const { workoutId } = req.query;
-
         if (!workoutId) {
             return throwBadRequestError(undefined, "workoutId es requerido.");
         }
@@ -78,15 +76,15 @@ exports.getWorkoutExercises = async (req, res, next) => {
 
         const { rows } = await pool.query(
             `SELECT 
-                we.id,
+                we.id as workout_exercise_id,
                 we.workout_id,
                 we.exercise_id,
                 we.created_at,
-                e.name,
-                e.avatar,
-                e.avatar_thumbnail,
-                e.video_url,
-                e.type
+                e.name as exercise_name,
+                e.avatar as exercise_avatar,
+                e.avatar_thumbnail as exercise_avatar_thumbnail,
+                e.video_url as exercise_video_url,
+                e.type as exercise_type
              FROM workout_exercises AS we
              INNER JOIN exercises AS e
                 ON we.exercise_id = e.id

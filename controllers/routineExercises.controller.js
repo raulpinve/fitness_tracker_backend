@@ -10,6 +10,7 @@ exports.createRoutineExercise = async (req, res, next) => {
             exerciseId,
             targetSets,
             targetReps,
+            targetWeight,
             targetDurationSeconds,
             targetDistanceKm
         } = req.body;
@@ -25,10 +26,11 @@ exports.createRoutineExercise = async (req, res, next) => {
                 exercise_id,
                 target_sets,
                 target_reps,
+                target_weight, 
                 target_duration_seconds,
                 target_distance_km
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) -- 3. Añadimos un placeholder ($8)
             RETURNING *`,
             [
                 uuidv7(),
@@ -36,6 +38,7 @@ exports.createRoutineExercise = async (req, res, next) => {
                 exerciseId,
                 targetSets || null,
                 targetReps || null,
+                targetWeight || null, 
                 targetDurationSeconds || null,
                 targetDistanceKm || null
             ]
@@ -47,15 +50,22 @@ exports.createRoutineExercise = async (req, res, next) => {
             data: snakeToCamel(rows[0])
         });
     } catch (error) {
+        if (error.code === '23505') {
+            return res.status(400).json({
+                status: "error",
+                message: "Este ejercicio ya existe en la rutina."
+            });
+        }
         next(error);
     }
 };
+
 
 exports.getRoutineExercise = async (req, res, next) => {
     try {
         const { routineExerciseId } = req.params;
         const { rows } = await pool.query(
-            `SELECT re.*, e.name as exercise_name
+            `SELECT re.*, e.name as exercise_name, e.type as exercise_type
              FROM routine_exercises re
              INNER JOIN exercises as e
              ON e.id = re.exercise_id
@@ -85,7 +95,7 @@ exports.getRoutineExercises = async (req, res, next) => {
         }
 
         const { rows } = await pool.query(
-            `SELECT re.*, e.name as exercise_name
+            `SELECT re.*, e.name as exercise_name, e.type as exercise_type
              FROM routine_exercises as re
              INNER JOIN exercises as e
              ON e.id = re.exercise_id
@@ -108,6 +118,7 @@ exports.updateRoutineExercise = async (req, res, next) => {
         const {
             targetSets,
             targetReps,
+            targetWeight, 
             targetDurationSeconds,
             targetDistanceKm
         } = req.body || {};
@@ -117,13 +128,15 @@ exports.updateRoutineExercise = async (req, res, next) => {
              SET 
                 target_sets = COALESCE($1, target_sets),
                 target_reps = COALESCE($2, target_reps),
-                target_duration_seconds = COALESCE($3, target_duration_seconds),
-                target_distance_km = COALESCE($4, target_distance_km)
-             WHERE id = $5
+                target_weight = COALESCE($3, target_weight), 
+                target_duration_seconds = COALESCE($4, target_duration_seconds),
+                target_distance_km = COALESCE($5, target_distance_km)
+             WHERE id = $6
              RETURNING *`,
             [
                 targetSets,
                 targetReps,
+                targetWeight, 
                 targetDurationSeconds,
                 targetDistanceKm,
                 routineExerciseId
@@ -137,7 +150,7 @@ exports.updateRoutineExercise = async (req, res, next) => {
         return res.status(200).json({
             statusCode: 200,
             status: "success",
-            message: "Ejercicio de rutina actualizada.",
+            message: "Ejercicio de rutina actualizado.",
             data: snakeToCamel(rows[0])
         });
 
@@ -145,6 +158,7 @@ exports.updateRoutineExercise = async (req, res, next) => {
         next(error);
     }
 };
+
 
 exports.deleteRoutineExercise = async (req, res, next) => {
     try {

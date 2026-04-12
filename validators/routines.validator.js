@@ -6,7 +6,7 @@ const { validateUUID } = require("./validator");
 
 exports.validateRoutineId = async (req, res, next) => {
     try {
-        const routineId = req.params.routineId || req.body.routineId || req.query.routineId;
+        const routineId = req?.params?.routineId || req?.body?.routineId || req?.query?.routineId;
         if (!validateUUID(routineId)) {
             return throwNotFoundError("El ID de la rutina no es válido.");
         }

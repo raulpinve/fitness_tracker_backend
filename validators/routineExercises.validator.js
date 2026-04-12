@@ -94,14 +94,20 @@ exports.validateUpdateRoutineExercise = [
         .isFloat({ min: 0.1 }).withMessage("La distancia debe ser un número mayor a 0."),
 
     body(["targetDurationSeconds", "targetDistanceKm"]).custom((value, { req }) => {
-        if (req.exercise.type === "strength" && value !== undefined) {
+        // Solo validamos si el valor tiene contenido real
+        const hasValue = value !== undefined && value !== null && value !== "";
+        
+        if (req.exercise.type === "strength" && hasValue) {
             throw new Error("No se puede asignar duración o distancia a un ejercicio de fuerza.");
         }
         return true;
     }),
 
     body(["targetSets", "targetReps"]).custom((value, { req }) => {
-        if (req.exercise.type === "cardio" && value !== undefined) {
+        // Solo validamos si el valor tiene contenido real
+        const hasValue = value !== undefined && value !== null && value !== "";
+
+        if (req.exercise.type === "cardio" && hasValue) {
             throw new Error("No se puede asignar series o repeticiones a un ejercicio de cardio.");
         }
         return true;

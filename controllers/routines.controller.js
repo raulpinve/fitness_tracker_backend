@@ -43,14 +43,28 @@ exports.getRoutine = async (req, res, next) => {
         const { routineId } = req.params;
 
         const { rows } = await pool.query(
-            `SELECT id,  name
-             FROM routines
-             WHERE id = $1`,
+            `SELECT r.id, r.name,
+                    COALESCE(
+                        JSON_AGG(
+                            JSON_BUILD_OBJECT(
+                                'id', e.id,
+                                'name', e.name,
+                                'target_sets', re.target_sets,
+                                'target_reps', re.target_reps
+                            )
+                        ) FILTER (WHERE e.id IS NOT NULL), 
+                        '[]'
+                    ) as exercises
+             FROM routines r
+             LEFT JOIN routine_exercises re ON r.id = re.routine_id
+             LEFT JOIN exercises e ON re.exercise_id = e.id
+             WHERE r.id = $1
+             GROUP BY r.id`,
             [routineId]
         );
 
         if (rows.length === 0) {
-            return throwNotFoundError("Rutina no encontrada.");
+            return res.status(404).json({ message: "Rutina no encontrada." });
         }
 
         return res.status(200).json({
@@ -58,11 +72,11 @@ exports.getRoutine = async (req, res, next) => {
             status: "success",
             data: snakeToCamel(rows[0])
         });
-
     } catch (error) {
         next(error);
     }
 };
+
 
 exports.getAllRoutines = async (req, res, next) => {
     try {
@@ -74,26 +88,24 @@ exports.getAllRoutines = async (req, res, next) => {
         const userId = req.query.userId || null;
 
         const query = `
-            SELECT id, name
-            FROM routines
-            WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
-              AND ($2::uuid IS NULL OR user_id = $2)
-            ORDER BY name
+            SELECT r.id, r.name,
+                   COALESCE(
+                       JSON_AGG(JSON_BUILD_OBJECT('name', e.name)) FILTER (WHERE e.id IS NOT NULL), 
+                       '[]'
+                   ) as exercises
+            FROM routines r
+            LEFT JOIN routine_exercises re ON r.id = re.routine_id
+            LEFT JOIN exercises e ON re.exercise_id = e.id
+            WHERE ($1::text IS NULL OR r.name ILIKE '%' || $1 || '%')
+              AND ($2::uuid IS NULL OR r.user_id = $2)
+            GROUP BY r.id
+            ORDER BY r.name
             LIMIT $3 OFFSET $4
         `;
 
-        const { rows } = await pool.query(query, [
-            name,
-            userId,
-            pageSize,
-            offset
-        ]);
-
+        const { rows } = await pool.query(query, [name, userId, pageSize, offset]);
         const { rows: totalRows } = await pool.query(
-            `SELECT COUNT(*)
-             FROM routines
-             WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
-               AND ($2::uuid IS NULL OR user_id = $2)`,
+            `SELECT COUNT(*) FROM routines WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%') AND ($2::uuid IS NULL OR user_id = $2)`,
             [name, userId]
         );
 
@@ -103,18 +115,14 @@ exports.getAllRoutines = async (req, res, next) => {
         return res.status(200).json({
             statusCode: 200,
             status: "success",
-            pagination: {
-                currentPage: page,
-                totalPages, 
-                totalRecords
-            },
-            data: rows.map(snakeToCamel)
+            pagination: { currentPage: page, totalPages, totalRecords },
+            data: rows.map(snakeToCamel) 
         });
-
     } catch (error) {
         next(error);
     }
 };
+
 
 exports.updateRoutine = async (req, res, next) => {
     try {
