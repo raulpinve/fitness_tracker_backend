@@ -48,12 +48,23 @@ CREATE TABLE exercises (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'strength' CHECK (type IN ('strength', 'cardio')),
+    muscle_group TEXT NOT NULL CHECK (muscle_group IN (
+        'pecho', 'espalda', 'hombros', 'biceps', 'triceps', 
+        'antebrazos', 'cuadriceps', 'isquios', 'gluteos', 
+        'gemelos', 'abs', 'cardio', 'full_body'
+    )),
+    equipment TEXT DEFAULT 'ninguno' CHECK (equipment IN (
+        'barras', 'mancuernas', 'máquinas', 'poleas', 
+        'peso_corporal', 'bandas', 'kettlebells', 'ninguno'
+    )),
     avatar TEXT,
     avatar_thumbnail TEXT, 
-    video_url TEXT
+    video_url TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
 );
-CREATE UNIQUE INDEX unique_exercise_name
-ON exercises (LOWER(name));
+
+CREATE UNIQUE INDEX unique_exercise_name ON exercises (LOWER(name));
+
 
 -- =========================
 -- ROUTINES (templates)

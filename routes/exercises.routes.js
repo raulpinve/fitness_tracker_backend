@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const exercisesController = require("../controllers/exercises.controller");
+const parseForm = require("../middlewares/parseForm.middleware");
 
 const {
     validateExerciseId,
@@ -7,35 +8,37 @@ const {
     validateUpdateExercise
 } = require("../validators/exercises.validator");
 
-// CREATE
+// Create
 router.post(
     "/",
+    parseForm(), 
     validateCreateExercise,
     exercisesController.createExercise
 );
 
-// GET ALL
+// Get all
 router.get(
     "/",
     exercisesController.getAllExercises
 );
 
-// GET ONE
+// Get one
 router.get(
     "/:exerciseId",
     validateExerciseId,
     exercisesController.getExercise
 );
 
-// UPDATE
+// Update
 router.patch(
     "/:exerciseId",
+    parseForm(), 
     validateExerciseId,
     validateUpdateExercise,
     exercisesController.updateExercise
 );
 
-// DELETE
+// Delete
 router.delete(
     "/:exerciseId",
     validateExerciseId,

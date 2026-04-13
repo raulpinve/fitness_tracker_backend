@@ -48,6 +48,35 @@ exports.validateCreateExercise = [
 
             return true;
         }),
+    body("muscleGroup")
+        .notEmpty().withMessage("Debe seleccionar un grupo muscular")
+        .isIn([
+            "pecho", 
+            "espalda", 
+            "hombros", 
+            "biceps", 
+            "triceps", 
+            "antebrazos", 
+            "cuadriceps", 
+            "isquios", 
+            "gluteos", 
+            "gemelos", 
+            "abs", 
+            "cardio", 
+            "full_body"
+        ]).withMessage("El grupo muscular seleccionado no es válido"),
+    body("equipment")
+        .notEmpty().withMessage("Debe seleccionar un tipo de equipamiento")
+        .isIn([
+            "barras", 
+            "mancuernas", 
+            "maquinas", 
+            "poleas", 
+            "peso_corporal", 
+            "bandas", 
+            "kettlebells", 
+            "ninguno"
+        ]).withMessage("El tipo de equipamiento seleccionado no es válido"),
     body("type")
         .isIn(['strength', 'cardio'])
         .withMessage("El tipo de ejercicio debe ser fuerza o cardio."),
