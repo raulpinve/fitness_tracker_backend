@@ -59,7 +59,7 @@ CREATE TABLE exercises (
     )),
     avatar TEXT,
     avatar_thumbnail TEXT, 
-    video_url TEXT,
+    video TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -85,7 +85,7 @@ ON routines (LOWER(name));
 CREATE TABLE routine_exercises (
     id UUID PRIMARY KEY,
     routine_id UUID REFERENCES routines(id) ON DELETE CASCADE,
-    exercise_id UUID REFERENCES exercises(id),
+    exercise_id UUID REFERENCES exercises(id) ON DELETE CASCADE,
     target_sets INT,
     target_reps INT,
     target_weight NUMERIC, 
@@ -113,7 +113,7 @@ CREATE TABLE workouts (
 CREATE TABLE workout_exercises (
     id UUID PRIMARY KEY,
     workout_id UUID REFERENCES workouts(id) ON DELETE CASCADE,
-    exercise_id UUID REFERENCES exercises(id),
+    exercise_id UUID REFERENCES exercises(id) ON DELETE CASCADE,
     order_index INT,
     created_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT unique_workout_exercise UNIQUE (workout_id, exercise_id)

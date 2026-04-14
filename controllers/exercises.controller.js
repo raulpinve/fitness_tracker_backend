@@ -80,7 +80,7 @@ exports.createExercise = async (req, res, next) => {
             const query = `
                 INSERT INTO exercises (
                     id, name, type, muscle_group, equipment, 
-                    avatar, avatar_thumbnail, video_url
+                    avatar, avatar_thumbnail, video
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING *
@@ -124,7 +124,7 @@ exports.getExercise = async (req, res, next) => {
         const { exerciseId } = req.params;
 
         const { rows } = await pool.query(
-            `SELECT id, name, avatar, avatar_thumbnail, video_url, type
+            `SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_group, equipment
              FROM exercises
              WHERE id = $1`,
             [exerciseId]
@@ -146,31 +146,44 @@ exports.getExercise = async (req, res, next) => {
 
 exports.getAllExercises = async (req, res, next) => {
     try {
+        // 1. Extraemos todos los parámetros de la query
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
         const offset = (page - 1) * pageSize;
 
         const name = req.query.name || null;
+        const type = req.query.type || null;
+        const muscleGroup = req.query.muscleGroup || null;
 
-        const query = `
-            SELECT id, name, avatar, avatar_thumbnail, video_url, type
-            FROM exercises
+        // 2. Construimos la cláusula WHERE dinámica
+        // El truco ($N::text IS NULL OR columna = $N) permite que si el parámetro es null, se ignore el filtro
+        const whereClause = `
             WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
-            ORDER BY name
-            LIMIT $2 OFFSET $3
+              AND ($2::text IS NULL OR type = $2)
+              AND ($3::text IS NULL OR muscle_group = $3)
         `;
 
+        const query = `
+            SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_group, equipment
+            FROM exercises
+            ${whereClause}
+            ORDER BY name
+            LIMIT $4 OFFSET $5
+        `;
+
+        // 3. Ejecutamos la consulta principal
         const { rows } = await pool.query(query, [
             name,
+            type,
+            muscleGroup,
             pageSize,
             offset
         ]);
 
+        // 4. Ejecutamos el conteo con los mismos filtros para la paginación
         const { rows: totalRows } = await pool.query(
-            `SELECT COUNT(*)
-             FROM exercises
-             WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')`,
-            [name]
+            `SELECT COUNT(*) FROM exercises ${whereClause}`,
+            [name, type, muscleGroup]
         );
 
         const totalRecords = parseInt(totalRows[0].count);
@@ -192,6 +205,7 @@ exports.getAllExercises = async (req, res, next) => {
     }
 };
 
+
 exports.updateExercise = async (req, res, next) => {
     try {
         const { exerciseId } = req.params;
@@ -202,7 +216,7 @@ exports.updateExercise = async (req, res, next) => {
 
         // 1. Obtener datos actuales de la DB
         const { rows: currentRows } = await pool.query(
-            "SELECT avatar, avatar_thumbnail, video_url FROM exercises WHERE id = $1",
+            "SELECT avatar, avatar_thumbnail, video FROM exercises WHERE id = $1",
             [exerciseId]
         );
 
@@ -211,7 +225,7 @@ exports.updateExercise = async (req, res, next) => {
         // IMPORTANTE: Extraemos los nombres actuales
         const oldAvatar = currentRows[0].avatar;
         const oldThumb = currentRows[0].avatar_thumbnail;
-        const oldVideo = currentRows[0].video_url;
+        const oldVideo = currentRows[0].video;
 
         const carpetaEjercicio = path.join(__dirname, `../uploads/exercises/${exerciseId}`);
         await fs.mkdir(carpetaEjercicio, { recursive: true });
@@ -272,7 +286,7 @@ exports.updateExercise = async (req, res, next) => {
                 equipment = COALESCE($4, equipment),
                 avatar = $5, 
                 avatar_thumbnail = $6, 
-                video_url = $7
+                video = $7
              WHERE id = $8 RETURNING *`,
             [name, type, muscleGroup, equipment, nombreImagen, nombreThumb, nombreVideo, exerciseId]
         );
@@ -305,6 +319,7 @@ exports.deleteExercise = async (req, res, next) => {
         });
 
     } catch (error) {
+        console.log(error)
         next(error);
     }
 };

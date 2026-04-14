@@ -95,7 +95,7 @@ exports.getRoutineExercises = async (req, res, next) => {
         }
 
         const { rows } = await pool.query(
-            `SELECT re.*, e.name as exercise_name, e.type as exercise_type
+            `SELECT re.*, e.name as exercise_name, e.type as exercise_type, e.avatar, e.avatar_thumbnail
              FROM routine_exercises as re
              INNER JOIN exercises as e
              ON e.id = re.exercise_id

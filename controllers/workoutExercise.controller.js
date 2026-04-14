@@ -83,7 +83,7 @@ exports.getWorkoutExercises = async (req, res, next) => {
                 e.name as exercise_name,
                 e.avatar as exercise_avatar,
                 e.avatar_thumbnail as exercise_avatar_thumbnail,
-                e.video_url as exercise_video_url,
+                e.video as exercise_video,
                 e.type as exercise_type
              FROM workout_exercises AS we
              INNER JOIN exercises AS e

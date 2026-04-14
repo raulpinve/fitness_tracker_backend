@@ -16,7 +16,6 @@ router.post('/login',
 
 // logout
 router.post("/logout", 
-    // authController.authenticateToken,
     authController.logout
 )
 
