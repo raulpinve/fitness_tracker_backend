@@ -5,19 +5,26 @@ const { validateRoutineId } = require("../validators/routines.validator");
 const {
     validateWorkoutId,
     validateCreateWorkout,
+    validateRoutineIdCampoOptional,
 } = require("../validators/workouts.validator");
 
 // Create workout
 router.post(
     "/",
+    validateRoutineIdCampoOptional,
     validateCreateWorkout,
     workoutsController.createWorkout
 );
 
 router.get("/:workoutId/summary", 
     validateWorkoutId,
-    workoutsController.summary
+    workoutsController.getWorkoutSummary
 );
+
+router.get('/history', 
+    workoutsController.getWorkoutHistory
+);
+
 
 // Get workout by ID
 router.get(
@@ -32,7 +39,7 @@ router.get(
     workoutsController.getAllWorkouts
 );
 
-router.patch("/update-routine-progress",
+router.patch("/:routineId/update-routine-progress",
     validateRoutineId, 
     workoutsController.updateRoutineProgress
 );
@@ -50,6 +57,7 @@ router.delete(
     validateWorkoutId,
     workoutsController.deleteWorkout
 );
+
 
 
 module.exports = router;

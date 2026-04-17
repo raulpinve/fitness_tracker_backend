@@ -9,11 +9,14 @@ const {
     validateUpdateCardioLog,
 } = require("../validators/cardioLogs.validator");
 const checkWorkoutNotClosed = require("../middlewares/checkWorkoutNotClosed");
+const { validateWorkoutId } = require("../validators/workouts.validator");
+const { validateExerciseId } = require("../validators/exercises.validator");
 
 // Crear registro de cardio
 router.post(
     "/",
-    validateWorkoutExerciseId,
+    validateWorkoutId, 
+    validateExerciseId,
     checkWorkoutNotClosed,
     validateExerciseType("cardio"),
     validateCreateCardioLog,
@@ -30,8 +33,9 @@ router.get(
 // Obtener todos los logs de cardio
 router.get(
     "/",
-    validateWorkoutExerciseId,
-    cardioLogsController.getCardioLogs
+    validateExerciseId, 
+    validateWorkoutId,
+    cardioLogsController.getAllCardioLogs
 );
 
 // Actualizar registro de cardio

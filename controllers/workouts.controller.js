@@ -17,39 +17,13 @@ exports.createWorkout = async (req, res, next) => {
             year: 'numeric'
         })}`;
 
-        // 1. Create the main workout
         const { rows: rowsWorkout } = await client.query(
             `INSERT INTO workouts (id, name, user_id, routine_id, started_at)
              VALUES ($1, $2, $3, $4, NOW())
              RETURNING *`,
             [uuidv7(), defaultName, userId, routineId || null]
         );
-        const workoutId = rowsWorkout[0].id;
 
-        // 2. If there is a routine, fetch its exercises and insert them one by one with new IDs
-        if (routineId) {
-            // Buscamos los ejercicios asociados a esa rutina
-            const { rows: routineExercises } = await client.query(
-                `SELECT exercise_id FROM routine_exercises WHERE routine_id = $1`,
-                [routineId]
-            );
-            if (routineExercises.length > 0) {
-                // We prepare the parameters for a single bulk INSERT
-                // We want something like: INSERT INTO ... VALUES ($1, $2, $3), ($4, $5, $6)...
-                const values = [];
-                const placeholders = routineExercises.map((re, index) => {
-                    const offset = index * 3;
-                    values.push(uuidv7(), workoutId, re.exercise_id); 
-                    return `($${offset + 1}, $${offset + 2}, $${offset + 3})`;
-                }).join(', ');
-
-                const insertExercisesQuery = `
-                    INSERT INTO workout_exercises (id, workout_id, exercise_id)
-                    VALUES ${placeholders}
-                `;
-                await client.query(insertExercisesQuery, values);
-            }
-        }
         await client.query("COMMIT");
 
         return res.status(201).json({
@@ -138,34 +112,39 @@ exports.getAllWorkouts = async (req, res, next) => {
 };
 
 exports.finishWorkout = async (req, res, next) => {
-    try {
-        const { workoutId } = req.params;
-        if(req.workout.finished_at){
-            throwConflictError(undefined, "El workout ya se encuentra finalizado")
-        }
+    const { workoutId } = req.params;
+    const client = await pool.connect();
 
-        const { rows } = await pool.query(
-            `UPDATE workouts
-             SET finished_at = NOW()
-             WHERE id = $1
-             RETURNING *`,
+    try {
+        await client.query("BEGIN");
+        const resFinish = await client.query(
+            `UPDATE workouts 
+             SET finished_at = NOW() 
+             WHERE id = $1 
+             RETURNING id, finished_at`,
             [workoutId]
         );
-        if (rows.length === 0) {
-            return throwNotFoundError("Workout no encontrado.");
+
+        if (resFinish.rowCount === 0) {
+            throw new Error("Workout no encontrado");
         }
 
-        return res.status(200).json({
-            statusCode: 200,
+        await client.query("COMMIT");
+
+        res.status(200).json({
             status: "success",
-            message: "Workout finalizado.",
-            data: snakeToCamel(rows[0])
+            message: "Entrenamiento finalizado y limpiado.",
+            data: resFinish.rows[0]
         });
 
     } catch (error) {
+        await client.query("ROLLBACK");
         next(error);
+    } finally {
+        client.release();
     }
 };
+
 
 exports.deleteWorkout = async (req, res, next) => {
     try {
@@ -190,98 +169,156 @@ exports.deleteWorkout = async (req, res, next) => {
         next(error);
     }
 };
-exports.summary = async (req, res, next) => {
+
+exports.getWorkoutSummary = async (req, res, next) => {
     try {
         const { workoutId } = req.params;
+        const query = `
+            WITH stats AS (
+                SELECT 
+                    e.id as "exerciseId",
+                    e.name as "name",
+                    e.type as "type",
+                    w.finished_at as "finishedAt",
+                    we.id as "workoutExerciseId",
+                    COALESCE(re.target_weight, 0) as "oldWeight",
+                    COALESCE(re.target_reps, 0) as "targetReps",
+                    COALESCE(re.target_sets, 0) as "targetSets",
+                    MAX(ws.weight) as "maxWeight",
+                    MAX(ws.reps) as "repsDone",
+                    COUNT(ws.id) as "setsDone",
+                    w.routine_id as "routineId"
+                FROM workout_exercises we
+                JOIN exercises e ON we.exercise_id = e.id
+                JOIN workouts w ON we.workout_id = w.id
+                LEFT JOIN routine_exercises re ON (w.routine_id = re.routine_id AND we.exercise_id = re.exercise_id)
+                LEFT JOIN workout_sets ws ON ws.workout_exercise_id = we.id
+                WHERE we.workout_id = $1
+                GROUP BY e.id, e.name, w.finished_at, e.type, we.id, re.target_weight, re.target_reps, re.target_sets, w.routine_id
+            )
+            SELECT * FROM stats;
+        `;
 
-        // 1. Ejecutamos la query potente que compara meta vs realidad
-        const { rows, rowCount } = await pool.query(
-            `SELECT 
-                re.routine_id as "routineId",
-                e.id as "exerciseId",
-                e.name,
-                e.type,
-                COALESCE(re.target_weight, 0) as "oldWeight",
-                (COALESCE(re.target_weight, 0) + 2.5) as "suggestedWeight",
-                re.target_reps,
-                re.target_sets,
-                CASE 
-                    WHEN MIN(ws.reps) >= re.target_reps AND COUNT(ws.id) >= re.target_sets THEN true 
-                    ELSE false 
-                END as "canProgress"
-            FROM workout_exercises we
-            JOIN exercises e ON we.exercise_id = e.id
-            JOIN workouts w ON we.workout_id = w.id
-            JOIN routine_exercises re ON (w.routine_id = re.routine_id AND we.exercise_id = re.exercise_id)
-            JOIN workout_sets ws ON we.id = ws.workout_exercise_id
-            WHERE we.workout_id = $1
-            GROUP BY 
-                re.routine_id, 
-                e.id, 
-                e.name, 
-                e.type, 
-                re.target_weight, 
-                re.target_reps, 
-                re.target_sets;`,
-            [workoutId]
-        );
+        const { rows } = await pool.query(query, [workoutId]);
 
+        const summary = rows.map(row => {
+            const hasTarget = Number(row.targetSets) > 0;
+            
+            // Lógica ESTRICTA: 
+            // Para poder progresar (canProgress), tiene que:
+            // 1. Haber hecho al menos los sets planeados.
+            // 2. Haber hecho al menos las reps planeadas.
+            // 3. ¡MUY IMPORTANTE!: El peso de hoy debe ser >= a la meta vieja (oldWeight).
+            const metWeightGoal = Number(row.maxWeight) >= Number(row.oldWeight);
+            
+            const canProgress = hasTarget && 
+                Number(row.setsDone) >= Number(row.targetSets) && 
+                Number(row.repsDone) >= Number(row.targetReps) &&
+                metWeightGoal; // <--- No te dejo subir si bajaste el peso hoy
 
-        // 2. Si no hay filas, puede que el workout no exista o no tenga ejercicios de rutina
-        if (rowCount === 0) {
-            return res.status(404).json({
-                statusCode: 404,
-                status: "error",
-                message: "No se encontraron ejercicios de rutina para este entrenamiento."
-            });
-        }
-
-        // 3. Devolvemos la data analizada para que el Frontend la muestre
-        return res.status(200).json({
-            statusCode: 200,
-            status: "success",
-            message: "Análisis de progreso generado.",
-            data: rows.map(snakeToCamel) // Aquí viaja la lista con los flags 'canProgress'
+            return {
+                ...row,
+                canProgress,
+                // Si progresó: Subimos 2.5kg sobre el peso MÁXIMO (ya sea el de la meta o el que hizo hoy si fue más alto)
+                // Si NO progresó: Mantenemos la meta vieja (oldWeight), NO bajamos a lo que hizo hoy.
+                suggestedWeight: canProgress 
+                    ? Math.max(Number(row.oldWeight), Number(row.maxWeight)) + 2.5 
+                    : Number(row.oldWeight) 
+            };
         });
 
+        res.status(200).json({ status: "success", data: summary });
     } catch (error) {
         next(error);
     }
 };
 
 exports.updateRoutineProgress = async (req, res, next) => {
-    const { routineId } = req.body; 
-    const { updates } = req.body; 
-
-    if (!updates || !Array.isArray(updates)) {
-        return res.status(400).json({ message: "No se proporcionaron actualizaciones válidas." });
-    }
-
     const client = await pool.connect();
-
     try {
-        await client.query('BEGIN');
+        const { routineId } = req.params;
+        const { updates } = req.body; 
+
+        await client.query("BEGIN");
 
         for (const update of updates) {
-            await client.query(
+            // USAMOS ESTA QUERY QUE ES MÁS AGRESIVA
+            const result = await client.query(
                 `UPDATE routine_exercises 
                  SET target_weight = $1 
-                 WHERE routine_id = $2 AND exercise_id = $3`,
+                 WHERE routine_id = $2 AND exercise_id = $3
+                 RETURNING *`, // <--- Esto nos dirá si encontró la fila
                 [update.newWeight, routineId, update.exerciseId]
             );
+            
+            console.log(`Ejercicio ${update.exerciseId}: ${result.rowCount} filas actualizadas`);
         }
 
-        await client.query('COMMIT');
-
-        res.status(200).json({
-            statusCode: 200,
-            status: "success",
-            message: "Rutina actualizada con los nuevos pesos de forma masiva."
-        });
+        await client.query("COMMIT");
+        res.json({ status: "success" });
     } catch (error) {
-        await client.query('ROLLBACK');
+        await client.query("ROLLBACK");
+        console.error("ERROR CRÍTICO EN DB:", error);
         next(error);
     } finally {
         client.release();
     }
 };
+exports.getWorkoutHistory = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        // Obtenemos página y límite de la query string (por defecto 1 y 10)
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const query = `
+            SELECT 
+                w.id,
+                w.name,
+                w.started_at as "startedAt",
+                w.finished_at as "finishedAt",
+                COALESCE(SUM(ws.weight * ws.reps), 0) as "totalVolume",
+                COUNT(DISTINCT we.exercise_id) as "exerciseCount",
+                (
+                    SELECT string_agg(e.name, ', ')
+                    FROM (
+                        SELECT e2.name
+                        FROM workout_exercises we2
+                        JOIN exercises e2 ON we2.exercise_id = e2.id
+                        WHERE we2.workout_id = w.id
+                        ORDER BY we2.created_at ASC
+                        LIMIT 3
+                    ) e
+                ) as "exercisesPreview"
+            FROM workouts w
+            LEFT JOIN workout_exercises we ON w.id = we.workout_id
+            LEFT JOIN workout_sets ws ON we.id = ws.workout_exercise_id
+            WHERE w.user_id = $1 AND w.finished_at IS NOT NULL
+            GROUP BY w.id
+            ORDER BY w.started_at DESC
+            LIMIT $2 OFFSET $3;
+        `;
+
+        const { rows } = await pool.query(query, [userId, limit, offset]);
+
+        // Consulta para saber el total de registros y manejar el "hasMore" en el front
+        const countQuery = `SELECT COUNT(*) FROM workouts WHERE user_id = $1 AND finished_at IS NOT NULL`;
+        const countResult = await pool.query(countQuery, [userId]);
+        const totalRecords = parseInt(countResult.rows[0].count);
+
+        res.status(200).json({
+            status: "success",
+            data: rows,
+            pagination: {
+                totalRecords,
+                currentPage: page,
+                totalPages: Math.ceil(totalRecords / limit),
+                hasNextPage: offset + rows.length < totalRecords
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+

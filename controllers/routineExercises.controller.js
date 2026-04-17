@@ -182,3 +182,31 @@ exports.deleteRoutineExercise = async (req, res, next) => {
         next(error);
     }
 };
+
+// Actualiza los pesos de una rutina basados en el progreso del workout
+exports.updateRoutineProgress = async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+        const { routineId } = req.params;
+        const { updates } = req.body; // Array de { exerciseId, newWeight }
+
+        await client.query("BEGIN");
+
+        for (const update of updates) {
+            await client.query(
+                `UPDATE routine_exercises 
+                 SET target_weight = $1 
+                 WHERE routine_id = $2 AND exercise_id = $3`,
+                [update.newWeight, routineId, update.exerciseId]
+            );
+        }
+
+        await client.query("COMMIT");
+        res.json({ status: "success", message: "Rutina actualizada correctamente" });
+    } catch (error) {
+        await client.query("ROLLBACK");
+        next(error);
+    } finally {
+        client.release();
+    }
+};

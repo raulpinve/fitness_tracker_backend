@@ -1,8 +1,10 @@
 const router = require("express").Router();
+const { validateWorkoutExerciseId } = require("../validators/workoutExercise.validator");
+const validateExerciseType = require("../validators/validateExerciseType.validator");
 const workoutSetsController = require("../controllers/workoutSets.controller");
 const checkWorkoutNotClosed = require("../middlewares/checkWorkoutNotClosed");
-const validateExerciseType = require("../validators/validateExerciseType.validator");
-const { validateWorkoutExerciseId } = require("../validators/workoutExercise.validator");
+const { validateExerciseId } = require("../validators/exercises.validator");
+const { validateWorkoutId } = require("../validators/workouts.validator");
 
 const {
     validateWorkoutSetId,
@@ -13,7 +15,8 @@ const {
 // Create workout set
 router.post(
     "/",
-    validateWorkoutExerciseId,
+    validateWorkoutId, 
+    validateExerciseId,
     checkWorkoutNotClosed,
     validateExerciseType("strength"),
     validateCreateWorkoutSet,
@@ -30,7 +33,9 @@ router.get(
 // Get all workout sets
 router.get(
     "/",
-    workoutSetsController.getWorkoutSets
+    validateExerciseId, 
+    validateWorkoutId,
+    workoutSetsController.getAllWorkoutSets
 );
 
 // Update workout set

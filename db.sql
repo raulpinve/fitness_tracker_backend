@@ -125,7 +125,7 @@ CREATE TABLE workout_exercises (
 CREATE TABLE workout_sets (
     id UUID PRIMARY KEY,
     workout_exercise_id UUID REFERENCES workout_exercises(id) ON DELETE CASCADE,
-
+    rpe INT,
     set_number INT NOT NULL,
     reps INT NOT NULL,
     weight NUMERIC NOT NULL,

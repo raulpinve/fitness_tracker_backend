@@ -5,6 +5,12 @@ const workoutExerciseController = require("../controllers/workoutExercise.contro
 const { validateWorkoutExerciseId } = require("../validators/workoutExercise.validator");
 const checkWorkoutNotClosed = require("../middlewares/checkWorkoutNotClosed");
 
+router.get(
+    "/active",
+    validateWorkoutId, 
+    workoutExerciseController.getWorkoutActiveExercises
+);
+
 // Create
 router.post(
     "/",

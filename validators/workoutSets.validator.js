@@ -6,7 +6,7 @@ const { validateUUID } = require("./validator");
 
 exports.validateWorkoutSetId = async (req, res, next) => {
     try {
-        const workoutSetId = req.params.workoutSetId;
+        const workoutSetId = req?.params?.workoutSetId;
         if (!validateUUID(workoutSetId)) {
             return throwNotFoundError("El ID del set no es válido.");
         }
