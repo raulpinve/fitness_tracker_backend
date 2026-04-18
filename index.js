@@ -7,7 +7,7 @@ const cookieParser = require("cookie-parser");
 const { initDB } = require('./initDB');
 
 app.use(cors({
-  origin: "http://localhost:5173", 
+  origin: "https://fitness.gestorempresarial.cloud", 
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
@@ -36,7 +36,7 @@ app.use("/api/auth", authRoutes);
 
 // --- Middleware de Protección ---
 // Todas las rutas que se definan DESPUÉS de esto requerirán token
-// app.use(authenticateToken);
+app.use(authenticateToken);
 
 // --- Rutas Protegidas bajo el prefijo /api ---
 app.use("/api/exercises", exercisesRoutes);
