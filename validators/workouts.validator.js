@@ -66,6 +66,17 @@ exports.validateCreateWorkout = [
         
             return true;
         }),
+    body('startedAt')
+        .exists().withMessage('La fecha es obligatoria')
+        .isISO8601().withMessage('Formato de fecha inválido')
+        .toDate(), // Convierte el string a un objeto Date de JS
+        // .custom((value) => {
+        //     const ahora = new Date();
+        //     if (value < ahora) {
+        //         throw new Error('La fecha no puede ser en el pasado');
+        //     }
+        //     return true;
+        // })
     body("name")
         .optional({ values: "falsy" })
         .isLength({ min: 2, max: 100 })

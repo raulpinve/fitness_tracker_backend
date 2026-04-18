@@ -128,10 +128,9 @@ CREATE TABLE workout_sets (
     rpe INT,
     set_number INT NOT NULL,
     reps INT NOT NULL,
+    weight_unit VARCHAR(5) DEFAULT 'kg',
     weight NUMERIC NOT NULL,
-
     created_at TIMESTAMP DEFAULT NOW(),
-
     UNIQUE(workout_exercise_id, set_number)
 );
 

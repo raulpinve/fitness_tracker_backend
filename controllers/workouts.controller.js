@@ -8,7 +8,9 @@ exports.createWorkout = async (req, res, next) => {
 
     try {
         await client.query("BEGIN");
-        const { routineId, name } = req.body || {};
+        
+        // 1. Extraemos startedAt del body (ya saneado por express-validator)
+        const { routineId, name, startedAt } = req.body || {};
         const { id: userId } = req.user;
 
         const defaultName = name || `${new Date().toLocaleDateString('es-ES', { 
@@ -17,11 +19,18 @@ exports.createWorkout = async (req, res, next) => {
             year: 'numeric'
         })}`;
 
+        // 2. Cambiamos NOW() por el parámetro $5
         const { rows: rowsWorkout } = await client.query(
             `INSERT INTO workouts (id, name, user_id, routine_id, started_at)
-             VALUES ($1, $2, $3, $4, NOW())
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING *`,
-            [uuidv7(), defaultName, userId, routineId || null]
+            [
+                uuidv7(), 
+                defaultName, 
+                userId, 
+                routineId || null, 
+                startedAt // El objeto Date que generó .toDate() en el validador
+            ]
         );
 
         await client.query("COMMIT");
@@ -40,6 +49,7 @@ exports.createWorkout = async (req, res, next) => {
         client.release();
     }
 };
+
 
 exports.getWorkout = async (req, res, next) => {
     try {
@@ -79,10 +89,12 @@ exports.getAllWorkouts = async (req, res, next) => {
         const offset = (page - 1) * pageSize;
 
         const query = `
-            SELECT *
-            FROM workouts
-            WHERE user_id = $1
-            ORDER BY started_at DESC
+            SELECT w.*, r.name as routine_name
+            FROM workouts as w
+            INNER JOIN routines as r
+            ON w.routine_id = r.id
+            WHERE w.user_id = $1
+            ORDER BY w.started_at DESC
             LIMIT $2 OFFSET $3
         `;
 
@@ -117,11 +129,27 @@ exports.finishWorkout = async (req, res, next) => {
 
     try {
         await client.query("BEGIN");
+
         const resFinish = await client.query(
             `UPDATE workouts 
-             SET finished_at = NOW() 
-             WHERE id = $1 
-             RETURNING id, finished_at`,
+                SET finished_at = (
+                    SELECT MAX(ultimo_momento)
+                    FROM (
+                        -- Momento del último set (Fuerza)
+                        SELECT MAX(ws.created_at) as ultimo_momento
+                        FROM workout_sets ws
+                        JOIN workout_exercises we ON ws.workout_exercise_id = we.id
+                        WHERE we.workout_id = $1
+                        
+                        UNION ALL
+                        
+                        -- Momento en que se agregó el último ejercicio (Cardio/Extras)
+                        SELECT MAX(created_at) as ultimo_momento
+                        FROM workout_exercises
+                        WHERE workout_id = $1
+                    ) AS subconsulta
+                )
+                WHERE id = $1`,
             [workoutId]
         );
 
@@ -145,30 +173,27 @@ exports.finishWorkout = async (req, res, next) => {
     }
 };
 
-
 exports.deleteWorkout = async (req, res, next) => {
     try {
         const { workoutId } = req.params;
+        const userId = req.user.id;
 
-        const { rowCount } = await pool.query(
-            `DELETE FROM workouts WHERE id = $1`,
-            [workoutId]
+        // Borramos el workout (esto borrará sus ejercicios y sets por el CASCADE)
+        const result = await pool.query(
+            'DELETE FROM workouts WHERE id = $1 AND user_id = $2',
+            [workoutId, userId]
         );
 
-        if (rowCount === 0) {
-            return throwNotFoundError("Workout no encontrado.");
+        if (result.rowCount === 0) {
+            return res.status(404).json({ status: "error", message: "Entrenamiento no encontrado" });
         }
 
-        return res.status(200).json({
-            statusCode: 200,
-            status: "success",
-            message: "Workout eliminado."
-        });
-
+        res.status(200).json({ status: "success", message: "Entrenamiento eliminado" });
     } catch (error) {
         next(error);
     }
 };
+
 
 exports.getWorkoutSummary = async (req, res, next) => {
     try {
@@ -185,6 +210,14 @@ exports.getWorkoutSummary = async (req, res, next) => {
                     COALESCE(re.target_reps, 0) as "targetReps",
                     COALESCE(re.target_sets, 0) as "targetSets",
                     MAX(ws.weight) as "maxWeight",
+                    -- Capturamos la unidad del set con el peso máximo
+                    (
+                        SELECT weight_unit 
+                        FROM workout_sets 
+                        WHERE workout_exercise_id = we.id 
+                        ORDER BY weight DESC, created_at DESC 
+                        LIMIT 1
+                    ) as "weightUnit",
                     MAX(ws.reps) as "repsDone",
                     COUNT(ws.id) as "setsDone",
                     w.routine_id as "routineId"
@@ -199,33 +232,34 @@ exports.getWorkoutSummary = async (req, res, next) => {
             SELECT * FROM stats;
         `;
 
+
         const { rows } = await pool.query(query, [workoutId]);
 
         const summary = rows.map(row => {
             const hasTarget = Number(row.targetSets) > 0;
             
-            // Lógica ESTRICTA: 
-            // Para poder progresar (canProgress), tiene que:
-            // 1. Haber hecho al menos los sets planeados.
-            // 2. Haber hecho al menos las reps planeadas.
-            // 3. ¡MUY IMPORTANTE!: El peso de hoy debe ser >= a la meta vieja (oldWeight).
+            // Lógica ESTRICTA de cumplimiento
             const metWeightGoal = Number(row.maxWeight) >= Number(row.oldWeight);
             
             const canProgress = hasTarget && 
                 Number(row.setsDone) >= Number(row.targetSets) && 
                 Number(row.repsDone) >= Number(row.targetReps) &&
-                metWeightGoal; // <--- No te dejo subir si bajaste el peso hoy
+                metWeightGoal;
+
+            // --- LÓGICA DE INCREMENTO DINÁMICO ---
+            // Si la unidad es 'lb', subimos 5. Si es 'kg' (o cualquier otra cosa), subimos 2.5.
+            const increment = (row.weightUnit === 'lb') ? 5 : 2.5;
 
             return {
                 ...row,
                 canProgress,
-                // Si progresó: Subimos 2.5kg sobre el peso MÁXIMO (ya sea el de la meta o el que hizo hoy si fue más alto)
-                // Si NO progresó: Mantenemos la meta vieja (oldWeight), NO bajamos a lo que hizo hoy.
+                // Aplicamos el incremento basado en la unidad detectada
                 suggestedWeight: canProgress 
-                    ? Math.max(Number(row.oldWeight), Number(row.maxWeight)) + 2.5 
+                    ? Math.max(Number(row.oldWeight), Number(row.maxWeight)) + increment 
                     : Number(row.oldWeight) 
             };
         });
+
 
         res.status(200).json({ status: "success", data: summary });
     } catch (error) {
@@ -264,6 +298,7 @@ exports.updateRoutineProgress = async (req, res, next) => {
         client.release();
     }
 };
+
 exports.getWorkoutHistory = async (req, res, next) => {
     try {
         const userId = req.user.id;

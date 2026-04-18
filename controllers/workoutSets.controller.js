@@ -7,7 +7,7 @@ exports.createWorkoutSet = async (req, res, next) => {
 
     const client = await pool.connect();
     try {
-        const { workoutId, exerciseId, reps, weight, rpe } = req.body;
+        const { workoutId, exerciseId, reps, weight, rpe, weightUnit } = req.body;
 
         await client.query("BEGIN");
 
@@ -37,10 +37,10 @@ exports.createWorkoutSet = async (req, res, next) => {
 
         // 3. Insert the set with its sequential number
         const { rows: setRows } = await client.query(
-            `INSERT INTO workout_sets (id, workout_exercise_id, set_number, reps, weight, rpe)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO workout_sets (id, workout_exercise_id, set_number, reps, weight, rpe, weight_unit )
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING *`,
-            [uuidv7(), workoutExerciseId, nextSetNumber, reps, weight, rpe]
+            [uuidv7(), workoutExerciseId, nextSetNumber, reps, weight, rpe, weightUnit || 'kg' ]
         );
 
         await client.query("COMMIT");

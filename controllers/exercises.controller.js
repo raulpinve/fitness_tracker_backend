@@ -323,3 +323,36 @@ exports.deleteExercise = async (req, res, next) => {
         next(error);
     }
 };
+
+exports.getExerciseProgress = async (req, res, next) => {
+    try {
+        const { exerciseId } = req.params;
+        const userId = req.user.id;
+
+        const query = `
+            SELECT 
+                TO_CHAR(w.started_at, 'DD/MM') as "date",
+                -- NORMALIZACIÓN: Si es LB, lo pasamos a KG para la gráfica
+                MAX(
+                    CASE 
+                        WHEN ws.weight_unit = 'lb' THEN ws.weight * 0.453592 
+                        ELSE ws.weight 
+                    END
+                ) as "value" 
+            FROM workout_sets ws
+            JOIN workout_exercises we ON ws.workout_exercise_id = we.id
+            JOIN workouts w ON we.workout_id = w.id
+            WHERE we.exercise_id = $1 
+              AND w.user_id = $2 
+              AND w.finished_at IS NOT NULL
+            GROUP BY w.started_at
+            ORDER BY w.started_at ASC
+            LIMIT 15;
+        `;
+
+        const { rows } = await pool.query(query, [exerciseId, userId]);
+        res.status(200).json({ status: "success", data: rows });
+    } catch (error) {
+        next(error);
+    }
+};

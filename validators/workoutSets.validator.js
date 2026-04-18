@@ -43,9 +43,13 @@ exports.validateCreateWorkoutSet = [
         .withMessage("reps debe ser un entero mayor a 0."),
 
     body("weight")
-        .notEmpty().withMessage("weight es requerido.")
+        .notEmpty().withMessage("El campo es requerido.")
         .isFloat({ min: 0 })
         .withMessage("weight debe ser un número mayor o igual a 0."),
+    
+    body("weightUnit")
+        .notEmpty().withMessage("El campo es requerido.")
+        .isIn(["kg", "lb"]),
 
     handleValidationErrors
 ];
@@ -58,6 +62,11 @@ exports.validateUpdateWorkoutSet = [
 
     body("weight")
         .optional()
+        .isFloat({ min: 0 })
+        .withMessage("weight debe ser un número mayor o igual a 0."),
+    
+    body("weightUnit")
+        .notEmpty().withMessage("El campo es requerido.")
         .isFloat({ min: 0 })
         .withMessage("weight debe ser un número mayor o igual a 0."),
 

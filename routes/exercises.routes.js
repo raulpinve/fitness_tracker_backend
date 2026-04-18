@@ -22,6 +22,10 @@ router.get(
     exercisesController.getAllExercises
 );
 
+router.get("/:exerciseId/progress", 
+    exercisesController.getExerciseProgress
+)
+
 // Get one
 router.get(
     "/:exerciseId",
