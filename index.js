@@ -36,7 +36,7 @@ app.use("/api/auth", authRoutes);
 
 // --- Middleware de Protección ---
 // Todas las rutas que se definan DESPUÉS de esto requerirán token
-app.use(authenticateToken);
+// app.use(authenticateToken);
 
 // --- Rutas Protegidas bajo el prefijo /api ---
 app.use("/api/exercises", exercisesRoutes);
