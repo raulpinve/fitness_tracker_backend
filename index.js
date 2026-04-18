@@ -7,7 +7,7 @@ const cookieParser = require("cookie-parser");
 const { initDB } = require('./initDB');
 
 app.use(cors({
-  origin: "https://fitness.gestorempresarial.cloud", 
+  origin: process.env.CORS_ORIGIN,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
@@ -54,7 +54,7 @@ app.use(handleErrorResponse);
   await initDB();
 })();
 
-const port = 3000;
+const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Servidor escuchando en http://localhost:${port}`);
 });

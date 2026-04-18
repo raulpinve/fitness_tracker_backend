@@ -65,10 +65,11 @@ exports.register = async (req, res, next) => {
         // 4. CONFIGURAR COOKIE
         res.cookie("refresh_token", refreshToken, {
             httpOnly: true,
-            secure: false, // true en prod
-            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production", 
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             maxAge: 7 * 24 * 60 * 60 * 1000
         });
+
 
         // 5. RESPUESTA COMPLETA (Incluyendo el usuario)
         return res.status(201).json({
@@ -132,9 +133,9 @@ exports.login = async (req, res, next) => {
         // 6. CONFIGURAR COOKIE
         res.cookie("refresh_token", refreshToken, {
             httpOnly: true,
-            secure: false, // true en prod
-            sameSite: "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000
+            secure: process.env.NODE_ENV === "production", 
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000 
         });
 
         // 7. RESPUESTA DINÁMICA
@@ -156,7 +157,6 @@ exports.login = async (req, res, next) => {
 exports.logout = async (req, res, next) => {
     try {
         const refreshToken = req.cookies.refresh_token;
-
         if (refreshToken) {
             const hashed = crypto
                 .createHash("sha256")
@@ -170,12 +170,11 @@ exports.logout = async (req, res, next) => {
             );
         }
 
-        // IMPORTANTE: Limpia la cookie con las mismas opciones que la creaste
         res.clearCookie("refresh_token", {
             httpOnly: true,
-            secure: false, // Cambiar a true en producción
-            sameSite: "lax",
-            path: "/" // Asegúrate de que el path sea el mismo
+            secure: process.env.NODE_ENV === "production", 
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            path: "/" 
         });
 
         return res.json({
@@ -302,9 +301,9 @@ exports.refreshToken = async (req, res, next) => {
         // Configurar nueva cookie
         res.cookie("refresh_token", newRefreshToken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production", // Solo true en producción
-            sameSite: "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000
+            secure: process.env.NODE_ENV === "production", 
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000 
         });
 
         // Respuesta final con datos en camelCase
