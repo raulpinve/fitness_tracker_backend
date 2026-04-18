@@ -15,7 +15,7 @@ exports.createExercise = async (req, res, next) => {
     const imageFile = req.files["image"] && req.files["image"][0];
     const videoFile = req.files["video"] && req.files["video"][0];
 
-    const { name, type, muscleGroup, equipment } = req.body;
+    const { name, type, muscleGroup, equipment, description } = req.body;
 
     let imagePath = null;
     let thumbPath = null;
@@ -80,9 +80,9 @@ exports.createExercise = async (req, res, next) => {
             const query = `
                 INSERT INTO exercises (
                     id, name, type, muscle_group, equipment, 
-                    avatar, avatar_thumbnail, video
+                    avatar, avatar_thumbnail, video, description
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 RETURNING *
             `;
             const values = [
@@ -93,7 +93,8 @@ exports.createExercise = async (req, res, next) => {
                 equipment || 'ninguno',
                 nombreImagen,
                 nombreThumb,
-                nombreVideo
+                nombreVideo, 
+                description
             ];
             
             const { rows } = await pool.query(query, values);
@@ -124,7 +125,7 @@ exports.getExercise = async (req, res, next) => {
         const { exerciseId } = req.params;
 
         const { rows } = await pool.query(
-            `SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_group, equipment
+            `SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_group, equipment, description
              FROM exercises
              WHERE id = $1`,
             [exerciseId]
@@ -209,7 +210,7 @@ exports.getAllExercises = async (req, res, next) => {
 exports.updateExercise = async (req, res, next) => {
     try {
         const { exerciseId } = req.params;
-        const { name, type, muscleGroup, equipment } = req.body || {};
+        const { name, type, muscleGroup, equipment, description } = req.body || {};
         
         const imageFile = req.files["image"]?.[0];
         const videoFile = req.files["video"]?.[0];
@@ -284,11 +285,12 @@ exports.updateExercise = async (req, res, next) => {
                 type = COALESCE($2, type),
                 muscle_group = COALESCE($3, muscle_group), 
                 equipment = COALESCE($4, equipment),
-                avatar = $5, 
-                avatar_thumbnail = $6, 
-                video = $7
-             WHERE id = $8 RETURNING *`,
-            [name, type, muscleGroup, equipment, nombreImagen, nombreThumb, nombreVideo, exerciseId]
+                description = COALESCE($5, description),
+                avatar = $6, 
+                avatar_thumbnail = $7, 
+                video = $8
+             WHERE id = $9 RETURNING *`,
+            [name, type, muscleGroup, equipment, description, nombreImagen, nombreThumb, nombreVideo, exerciseId]
         );
 
         return res.status(200).json({

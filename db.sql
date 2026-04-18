@@ -57,6 +57,7 @@ CREATE TABLE exercises (
         'barras', 'mancuernas', 'máquinas', 'poleas', 
         'peso_corporal', 'bandas', 'kettlebells', 'ninguno'
     )),
+    description TEXT,
     avatar TEXT,
     avatar_thumbnail TEXT, 
     video TEXT,

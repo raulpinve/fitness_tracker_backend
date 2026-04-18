@@ -80,6 +80,15 @@ exports.validateCreateExercise = [
     body("type")
         .isIn(['strength', 'cardio'])
         .withMessage("El tipo de ejercicio debe ser fuerza o cardio."),
+    body('description')
+        .optional({ checkFalsy: true })
+        .trim()
+        .isLength({ max: 1500 }) 
+        .withMessage('Descripción demasiado larga')
+        .customSanitizer(value => {
+            return value.replace(/<[^>]*>/g, '');
+        }),
+
     handleValidationErrors
 ];
 
@@ -109,6 +118,15 @@ exports.validateUpdateExercise = [
         .optional()
         .isIn(['strength', 'cardio'])
         .withMessage("El tipo de ejercicio debe ser fuerza o cardio."),
+    body('description')
+        .optional({ checkFalsy: true })
+        .trim()
+        .isLength({ max: 1500 }) 
+        .withMessage('Descripción demasiado larga')
+        .customSanitizer(value => {
+            return value.replace(/<[^>]*>/g, '');
+        }),
+
     handleValidationErrors
 ];
 
