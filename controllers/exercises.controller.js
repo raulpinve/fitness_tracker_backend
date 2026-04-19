@@ -11,18 +11,20 @@ sharp.cache(false);
 exports.createExercise = async (req, res, next) => {
     const exerciseId = uuidv7();
     
-    // Formidable v3 entrega arrays: [file]
     const imageFile = req.files["image"] && req.files["image"][0];
     const videoFile = req.files["video"] && req.files["video"][0];
 
-    const { name, type, muscleGroup, equipment, description } = req.body;
+    // Cambiamos muscleGroup por muscleGroups (plural)
+    const { name, type, muscleGroups, equipment, description } = req.body;
 
     let imagePath = null;
     let thumbPath = null;
     let videoPath = null;
 
+    console.log(muscleGroups)
+
     try {
-        // 1. Validaciones de archivos (Siguiendo tu lógica)
+        // 1. Validaciones de archivos (Se mantiene igual)
         if (imageFile) {
             if (!validateSizeFile(imageFile, 2)) throwBadRequestError("image", "La imagen excede los 2MB.");
             if (!validateMimeTypeFile(["image/jpeg", "image/png", "image/webp"], imageFile)) {
@@ -47,20 +49,13 @@ exports.createExercise = async (req, res, next) => {
 
         if (imageFile) {
             nombreImagen = imageFile.newFilename;
-            // Forzamos la extensión .webp en el thumbnail para asegurar transparencia y poco peso
             nombreThumb = `thumb-${path.parse(nombreImagen).name}.webp`; 
-            
             imagePath = path.join(carpetaEjercicio, nombreImagen);
             thumbPath = path.join(carpetaEjercicio, nombreThumb);
-
             await subirArchivo(imageFile.filepath, imagePath);
 
             try {
-                await sharp(imagePath)
-                    .rotate()
-                    .resize(300)
-                    .webp({ quality: 80 }) 
-                    .toFile(thumbPath);
+                await sharp(imagePath).rotate().resize(300).webp({ quality: 80 }).toFile(thumbPath);
             } catch (error) {
                 await eliminarArchivo(imagePath);
                 throw error;
@@ -75,11 +70,19 @@ exports.createExercise = async (req, res, next) => {
             await subirArchivo(videoFile.filepath, videoPath);
         }
 
-        // 5. Insertar en Base de Datos
+        // --- 5. NORMALIZACIÓN DEL ARRAY DE MÚSCULOS ---
+        // Formidable v3/v4 puede entregar los datos como string o array.
+        // Forzamos que muscleGroups sea siempre un Array para Postgres.
+        let finalMuscleGroups = [];
+        if (muscleGroups) {
+            finalMuscleGroups = Array.isArray(muscleGroups) ? muscleGroups : [muscleGroups];
+        }
+
+        // 6. Insertar en Base de Datos
         try {
             const query = `
                 INSERT INTO exercises (
-                    id, name, type, muscle_group, equipment, 
+                    id, name, type, muscle_groups, equipment, 
                     avatar, avatar_thumbnail, video, description
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -89,7 +92,7 @@ exports.createExercise = async (req, res, next) => {
                 exerciseId,
                 name,
                 type || 'strength',
-                muscleGroup,
+                finalMuscleGroups, // <--- Ahora pasamos el Array normalizado
                 equipment || 'ninguno',
                 nombreImagen,
                 nombreThumb,
@@ -119,19 +122,29 @@ exports.createExercise = async (req, res, next) => {
     }
 };
 
-
 exports.getExercise = async (req, res, next) => {
     try {
         const { exerciseId } = req.params;
 
-        const { rows } = await pool.query(
-            `SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_group, equipment, description
-             FROM exercises
-             WHERE id = $1`,
-            [exerciseId]
-        );
+        const query = `
+            SELECT 
+                id, 
+                name, 
+                avatar, 
+                avatar_thumbnail, 
+                video, 
+                type, 
+                muscle_groups,
+                equipment, 
+                description
+            FROM exercises
+            WHERE id = $1
+        `;
+
+        const { rows } = await pool.query(query, [exerciseId]);
+
         if (rows.length === 0) {
-            return throwNotFoundError("Ejercicio no encontrado.");
+            throwNotFoundError("Ejercicio no encontrado.")
         }
 
         return res.status(200).json({
@@ -145,9 +158,9 @@ exports.getExercise = async (req, res, next) => {
     }
 };
 
+
 exports.getAllExercises = async (req, res, next) => {
     try {
-        // 1. Extraemos todos los parámetros de la query
         const page = parseInt(req.query.page) || 1;
         const pageSize = parseInt(req.query.pageSize) || 10;
         const offset = (page - 1) * pageSize;
@@ -156,23 +169,23 @@ exports.getAllExercises = async (req, res, next) => {
         const type = req.query.type || null;
         const muscleGroup = req.query.muscleGroup || null;
 
-        // 2. Construimos la cláusula WHERE dinámica
-        // El truco ($N::text IS NULL OR columna = $N) permite que si el parámetro es null, se ignore el filtro
+        // 2. Cláusula WHERE dinámica actualizada para ARRAYS
+        // Usamos "$3 = ANY(muscle_groups)" para buscar dentro del array
         const whereClause = `
             WHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
               AND ($2::text IS NULL OR type = $2)
-              AND ($3::text IS NULL OR muscle_group = $3)
+              AND ($3::text IS NULL OR $3 = ANY(muscle_groups))
         `;
 
+        // Actualizamos muscle_group -> muscle_groups en el SELECT
         const query = `
-            SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_group, equipment
+            SELECT id, name, avatar, avatar_thumbnail, video, type, muscle_groups, equipment
             FROM exercises
             ${whereClause}
             ORDER BY name
             LIMIT $4 OFFSET $5
         `;
 
-        // 3. Ejecutamos la consulta principal
         const { rows } = await pool.query(query, [
             name,
             type,
@@ -181,7 +194,6 @@ exports.getAllExercises = async (req, res, next) => {
             offset
         ]);
 
-        // 4. Ejecutamos el conteo con los mismos filtros para la paginación
         const { rows: totalRows } = await pool.query(
             `SELECT COUNT(*) FROM exercises ${whereClause}`,
             [name, type, muscleGroup]
@@ -206,28 +218,26 @@ exports.getAllExercises = async (req, res, next) => {
     }
 };
 
-
 exports.updateExercise = async (req, res, next) => {
     try {
         const { exerciseId } = req.params;
-        const { name, type, muscleGroup, equipment, description } = req.body || {};
         
-        const imageFile = req.files["image"]?.[0];
-        const videoFile = req.files["video"]?.[0];
+        // 1. Extraemos los campos (Usamos muscleGroups en plural)
+        const { name, type, muscleGroups, equipment, description } = req.body || {};
+        
+        // Formidable v3 entrega arrays de archivos
+        const imageFile = req.files["image"] && req.files["image"][0];
+        const videoFile = req.files["video"] && req.files["video"][0];
 
-        // 1. Obtener datos actuales de la DB
+        // 2. Obtener datos actuales de la DB
         const { rows: currentRows } = await pool.query(
             "SELECT avatar, avatar_thumbnail, video FROM exercises WHERE id = $1",
             [exerciseId]
         );
 
-        if (currentRows.length === 0) return throwNotFoundError("Ejercicio no encontrado.");
+        if (currentRows.length === 0) return next(throwNotFoundError("Ejercicio no encontrado."));
         
-        // IMPORTANTE: Extraemos los nombres actuales
-        const oldAvatar = currentRows[0].avatar;
-        const oldThumb = currentRows[0].avatar_thumbnail;
-        const oldVideo = currentRows[0].video;
-
+        const { avatar: oldAvatar, avatar_thumbnail: oldThumb, video: oldVideo } = currentRows[0];
         const carpetaEjercicio = path.join(__dirname, `../uploads/exercises/${exerciseId}`);
         await fs.mkdir(carpetaEjercicio, { recursive: true });
 
@@ -235,19 +245,11 @@ exports.updateExercise = async (req, res, next) => {
         let nombreThumb = oldThumb;
         let nombreVideo = oldVideo;
 
-        // 3. Procesar Imagen (Si el usuario subió una nueva)
+        // 3. Procesar Imagen Nueva
         if (imageFile) {
-            // ELIMINACIÓN FÍSICA: Usamos los nombres que guardamos arriba
-            if (oldAvatar) {
-                const pathAvatar = path.join(carpetaEjercicio, oldAvatar);
-                await fs.unlink(pathAvatar).catch(err => console.log("No se pudo borrar avatar viejo:", err.message));
-            }
-            if (oldThumb) {
-                const pathThumb = path.join(carpetaEjercicio, oldThumb);
-                await fs.unlink(pathThumb).catch(err => console.log("No se pudo borrar thumb viejo:", err.message));
-            }
+            if (oldAvatar) await fs.unlink(path.join(carpetaEjercicio, oldAvatar)).catch(() => {});
+            if (oldThumb) await fs.unlink(path.join(carpetaEjercicio, oldThumb)).catch(() => {});
 
-            // Nuevos nombres
             nombreImagen = `${Date.now()}-${imageFile.newFilename}`;
             nombreThumb = `thumb-${path.parse(nombreImagen).name}.webp`;
             
@@ -264,12 +266,9 @@ exports.updateExercise = async (req, res, next) => {
                 .toFile(thumbPath);
         }
 
-        // 4. Procesar Video (Si el usuario subió uno nuevo)
+        // 4. Procesar Video Nuevo
         if (videoFile) {
-            if (oldVideo) {
-                const pathVideo = path.join(carpetaEjercicio, oldVideo);
-                await fs.unlink(pathVideo).catch(err => console.log("No se pudo borrar video viejo:", err.message));
-            }
+            if (oldVideo) await fs.unlink(path.join(carpetaEjercicio, oldVideo)).catch(() => {});
 
             nombreVideo = `${Date.now()}-${videoFile.newFilename}`;
             const videoPath = path.join(carpetaEjercicio, nombreVideo);
@@ -278,19 +277,37 @@ exports.updateExercise = async (req, res, next) => {
             await fs.unlink(videoFile.filepath);
         }
 
-        // 5. DB Update
+        // --- 5. NORMALIZACIÓN DEL ARRAY DE MÚSCULOS ---
+        // Si no viene nada en el body, mantenemos lo que hay en la DB usando COALESCE en el SQL.
+        // Pero si viene algo, nos aseguramos de que sea un Array para Postgres.
+        let finalMuscleGroups = null; 
+        if (muscleGroups) {
+            finalMuscleGroups = Array.isArray(muscleGroups) ? muscleGroups : [muscleGroups];
+        }
+
+        // 6. DB Update (Actualizamos a muscle_groups)
         const { rows } = await pool.query(
             `UPDATE exercises SET 
                 name = COALESCE($1, name), 
                 type = COALESCE($2, type),
-                muscle_group = COALESCE($3, muscle_group), 
+                muscle_groups = COALESCE($3, muscle_groups), -- <--- plural
                 equipment = COALESCE($4, equipment),
                 description = COALESCE($5, description),
                 avatar = $6, 
                 avatar_thumbnail = $7, 
                 video = $8
              WHERE id = $9 RETURNING *`,
-            [name, type, muscleGroup, equipment, description, nombreImagen, nombreThumb, nombreVideo, exerciseId]
+            [
+                name, 
+                type, 
+                finalMuscleGroups, // Enviamos el array o null para el COALESCE
+                equipment, 
+                description, 
+                nombreImagen, 
+                nombreThumb, 
+                nombreVideo, 
+                exerciseId
+            ]
         );
 
         return res.status(200).json({

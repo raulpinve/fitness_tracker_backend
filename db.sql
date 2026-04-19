@@ -48,24 +48,30 @@ CREATE TABLE exercises (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'strength' CHECK (type IN ('strength', 'cardio')),
-    muscle_group TEXT NOT NULL CHECK (muscle_group IN (
-        'pecho', 'espalda', 'lumbares', 'hombros', 'biceps', 'triceps', 
-        'antebrazos', 'cuadriceps', 'isquios', 'gluteos', 
-        'gemelos', 'aductores', 'abs', 'cardio', 'full_body'
-    )),
+    
+    -- Cambio clave: Ahora es un ARRAY de texto para soportar varios músculos
+    muscle_groups TEXT[] NOT NULL DEFAULT '{}',
+    
     equipment TEXT DEFAULT 'ninguno' CHECK (equipment IN (
         'barras', 'mancuernas', 'maquinas', 'poleas', 'banco',
         'peso_corporal', 'bandas', 'kettlebells', 'ninguno'
     )),
-    description TEXT,
+    
+    description TEXT, -- Aquí guardamos el formato "Posición | Ejecución"
     avatar TEXT,
     avatar_thumbnail TEXT, 
     video TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    -- Nueva Restricción para validar que todos los elementos del array sean válidos
+    CONSTRAINT exercises_muscle_groups_check CHECK (
+        muscle_groups <@ ARRAY[
+            'pecho', 'espalda', 'lumbares', 'hombros', 'biceps', 'triceps', 
+            'antebrazos', 'cuadriceps', 'isquios', 'gluteos', 
+            'gemelos', 'aductores', 'abs', 'cardio', 'full_body'
+        ]::text[]
+    )
 );
-
-CREATE UNIQUE INDEX unique_exercise_name ON exercises (LOWER(name));
-
 
 -- =========================
 -- ROUTINES (templates)

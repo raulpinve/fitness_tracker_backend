@@ -41,45 +41,38 @@ exports.validateCreateExercise = [
                 `SELECT id FROM exercises WHERE LOWER(name) = LOWER($1)`,
                 [value]
             );
-
             if (rows.length > 0) {
                 throw new Error("Ya existe un ejercicio con ese nombre.");
             }
-
             return true;
         }),
-    body("muscleGroup")
-        .notEmpty().withMessage("Debe seleccionar un grupo muscular")
-        .isIn([
-            "pecho", 
-            "espalda", 
-            "hombros", 
-            "biceps", 
-            "triceps", 
-            "antebrazos", 
-            "cuadriceps", 
-            "isquios", 
-            "gluteos", 
-            "gemelos", 
-            "abs", 
-            "cardio", 
-            "full_body"
-        ]).withMessage("El grupo muscular seleccionado no es válido"),
+
+    // --- CAMBIO CLAVE: Validación de ARRAY de músculos ---
+    body("muscleGroups")
+        .toArray() // Convierte a array si llega como un solo string
+        .isArray({ min: 1 }).withMessage("Debe seleccionar al menos un grupo muscular")
+        .custom((values) => {
+            const allowed = [
+                'pecho', 'espalda', 'lumbares', 'hombros', 'biceps', 'triceps', 
+                'antebrazos', 'cuadriceps', 'isquios', 'gluteos', 
+                'gemelos', 'aductores', 'abs', 'cardio', 'full_body'
+            ];
+            // Verificamos que cada músculo enviado esté en la lista permitida
+            return values.every(muscle => allowed.includes(muscle));
+        })
+        .withMessage("Uno o más grupos musculares seleccionados no son válidos"),
+
     body("equipment")
         .notEmpty().withMessage("Debe seleccionar un tipo de equipamiento")
         .isIn([
-            "barras", 
-            "mancuernas", 
-            "maquinas", 
-            "poleas", 
-            "peso_corporal", 
-            "bandas", 
-            "kettlebells", 
-            "ninguno"
+            "barras", "mancuernas", "maquinas", "poleas", "banco",
+            "peso_corporal", "bandas", "kettlebells", "ninguno"
         ]).withMessage("El tipo de equipamiento seleccionado no es válido"),
+
     body("type")
         .isIn(['strength', 'cardio'])
         .withMessage("El tipo de ejercicio debe ser fuerza o cardio."),
+
     body('description')
         .optional({ checkFalsy: true })
         .trim()
@@ -100,24 +93,48 @@ exports.validateUpdateExercise = [
         .trim()
         .custom(async (value, { req }) => {
             const exerciseId = req.params.exerciseId;
-
             const { rows } = await pool.query(
                 `SELECT id FROM exercises 
                  WHERE LOWER(name) = LOWER($1) 
                  AND id != $2`,
                 [value, exerciseId]
             );
-
             if (rows.length > 0) {
                 throw new Error("Ya existe otro ejercicio con ese nombre.");
             }
-
             return true;
         }),
+
+    body("muscleGroups")
+        .optional()
+        .customSanitizer(value => {
+            // Normalizamos: siempre devolver un array para el validador
+            if (typeof value === 'string') return [value];
+            return value;
+        })
+        .isArray({ min: 1 }).withMessage("Debe seleccionar al menos un grupo muscular")
+        .custom((values) => {
+            const allowed = [
+                'pecho', 'espalda', 'lumbares', 'hombros', 'biceps', 'triceps', 
+                'antebrazos', 'cuadriceps', 'isquios', 'gluteos', 
+                'gemelos', 'aductores', 'abs', 'cardio', 'full_body'
+            ];
+            return values.every(muscle => allowed.includes(muscle));
+        })
+        .withMessage("Uno o más grupos musculares seleccionados no son válidos"),
+
+    body("equipment")
+        .optional()
+        .isIn([
+            "barras", "mancuernas", "maquinas", "poleas", "banco",
+            "peso_corporal", "bandas", "kettlebells", "ninguno"
+        ]).withMessage("El tipo de equipamiento seleccionado no es válido"),
+
     body("type")
         .optional()
         .isIn(['strength', 'cardio'])
         .withMessage("El tipo de ejercicio debe ser fuerza o cardio."),
+
     body('description')
         .optional({ checkFalsy: true })
         .trim()
@@ -129,6 +146,7 @@ exports.validateUpdateExercise = [
 
     handleValidationErrors
 ];
+
 
 exports.validateGetAllExercises = [
     query("page")

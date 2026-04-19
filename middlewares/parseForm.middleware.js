@@ -30,8 +30,17 @@ const parseForm = (customOptions = {}) => {
             }
             // Firstvalues evita que cada "value" del field sea un "array" (comportamiento por defecto de express-validator)
             req.body = Object.fromEntries(
-                Object.entries(fields).map(([key, value]) => [key, Array.isArray(value) ? value[0] : value])
+                Object.entries(fields).map(([key, value]) => {
+                    // Si el campo es muscleGroups, queremos el array completo
+                    if (key === 'muscleGroups') {
+                        return [key, Array.isArray(value) ? value : [value]];
+                    }
+                    
+                    // Para el resto de campos (name, type, etc.), mantenemos tu lógica de valor único
+                    return [key, Array.isArray(value) ? value[0] : value];
+                })
             );
+
             req.files = files;
             next();
         });
