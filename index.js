@@ -13,6 +13,7 @@ app.use(cors({
   credentials: true
 }));
 
+
 app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.json()); 
 app.use(cookieParser());

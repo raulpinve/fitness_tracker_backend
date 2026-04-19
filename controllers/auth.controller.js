@@ -7,6 +7,14 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { snakeToCamel } = require("../utils/utils.helper");
 
+const isProd = process.env.NODE_ENV === "production";
+const cookieConfig = {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 exports.register = async (req, res, next) => {
     try {
         const { firstName, lastName, username, email, password } = req.body;
@@ -63,13 +71,7 @@ exports.register = async (req, res, next) => {
         );
 
         // 4. CONFIGURAR COOKIE
-        res.cookie("refresh_token", refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production", 
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000
-        });
-
+        res.cookie("refresh_token", refreshToken, cookieConfig);
 
         // 5. RESPUESTA COMPLETA (Incluyendo el usuario)
         return res.status(201).json({
@@ -78,7 +80,7 @@ exports.register = async (req, res, next) => {
             message: "Usuario registrado.",
             data: {
                 accessToken,
-                user: newUser // Ahora el frontend recibe firstName, lastName, etc.
+                user: newUser 
             }
         });
 
@@ -131,12 +133,7 @@ exports.login = async (req, res, next) => {
         const user = snakeToCamel(userDataRaw);
 
         // 6. CONFIGURAR COOKIE
-        res.cookie("refresh_token", refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production", 
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000 
-        });
+        res.cookie("refresh_token", refreshToken, cookieConfig);
 
         // 7. RESPUESTA DINÁMICA
         return res.json({
@@ -145,7 +142,7 @@ exports.login = async (req, res, next) => {
             message: "Inicio de sesión exitoso.",
             data: {
                 accessToken,
-                user // Ahora el frontend tiene firstName, lastName, etc.
+                user 
             }
         });
 
@@ -172,8 +169,8 @@ exports.logout = async (req, res, next) => {
 
         res.clearCookie("refresh_token", {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production", 
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            secure: isProd, 
+            sameSite: isProd? "none" : "lax",
             path: "/" 
         });
 
@@ -299,12 +296,7 @@ exports.refreshToken = async (req, res, next) => {
         await client.query("COMMIT");
 
         // Configurar nueva cookie
-        res.cookie("refresh_token", newRefreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production", 
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000 
-        });
+        res.cookie("refresh_token", newRefreshToken, cookieConfig);
 
         // Respuesta final con datos en camelCase
         return res.json({

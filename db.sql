@@ -45,23 +45,23 @@ CREATE TABLE sessions (
 -- EXERCISES
 -- =========================
 CREATE TABLE exercises (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     type TEXT NOT NULL DEFAULT 'strength' CHECK (type IN ('strength', 'cardio')),
     muscle_group TEXT NOT NULL CHECK (muscle_group IN (
-        'pecho', 'espalda', 'hombros', 'biceps', 'triceps', 
+        'pecho', 'espalda', 'lumbares', 'hombros', 'biceps', 'triceps', 
         'antebrazos', 'cuadriceps', 'isquios', 'gluteos', 
-        'gemelos', 'abs', 'cardio', 'full_body'
+        'gemelos', 'aductores', 'abs', 'cardio', 'full_body'
     )),
     equipment TEXT DEFAULT 'ninguno' CHECK (equipment IN (
-        'barras', 'mancuernas', 'máquinas', 'poleas', 
+        'barras', 'mancuernas', 'maquinas', 'poleas', 'banco',
         'peso_corporal', 'bandas', 'kettlebells', 'ninguno'
     )),
     description TEXT,
     avatar TEXT,
     avatar_thumbnail TEXT, 
     video TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX unique_exercise_name ON exercises (LOWER(name));
