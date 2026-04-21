@@ -91,7 +91,7 @@ exports.getAllWorkouts = async (req, res, next) => {
         const query = `
             SELECT w.*, r.name as routine_name
             FROM workouts as w
-            INNER JOIN routines as r
+            LEFT JOIN routines as r
             ON w.routine_id = r.id
             WHERE w.user_id = $1
             ORDER BY w.started_at DESC
