@@ -21,8 +21,6 @@ exports.createExercise = async (req, res, next) => {
     let thumbPath = null;
     let videoPath = null;
 
-    console.log(muscleGroups)
-
     try {
         // 1. Validaciones de archivos (Se mantiene igual)
         if (imageFile) {
